@@ -46,7 +46,7 @@
 
 ros::Publisher filtered_points_pub;
 
-static int sample_num = 1000;
+static int sample_num = 5000;   //LK:was 1000
 
 static ros::Publisher points_downsampler_info_pub;
 static points_downsampler::PointsDownsamplerInfo points_downsampler_info_msg;
