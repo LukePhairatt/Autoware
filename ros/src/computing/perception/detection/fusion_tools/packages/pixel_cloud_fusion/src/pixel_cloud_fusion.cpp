@@ -45,25 +45,38 @@ RosPixelCloudFusionApp::TransformPoint(const pcl::PointXYZ &in_point, const tf::
 	return pcl::PointXYZ(tf_point_t.x(), tf_point_t.y(), tf_point_t.z());
 }
 
-void RosPixelCloudFusionApp::ImageCallback(const sensor_msgs::Image::ConstPtr &in_image_msg)
+
+void RosPixelCloudFusionApp::SaveCurrentImageFrame(const sensor_msgs::Image::ConstPtr &in_image_msg, int camera_id)
 {
-	if (!camera_info_ok_)
-	{
-		ROS_INFO("[%s] Waiting for Intrinsics to be available.", __APP_NAME__);
-		return;
-	}
-	if (processing_)
-		return;
+  // save current (undistorted) frame
+  if (!camera_info_ok_)
+  {
+    ROS_INFO("[%s] Waiting for Intrinsics to be available for all cameras.", __APP_NAME__);
+    return;
+  }
+  if (processing_)
+    return;
 
-	cv_bridge::CvImagePtr cv_image = cv_bridge::toCvCopy(in_image_msg, "bgr8");
-	cv::Mat in_image = cv_image->image;
+  //message to cv image
+  cv_bridge::CvImagePtr cv_image = cv_bridge::toCvCopy(in_image_msg, "bgr8");
+  //cv::Mat in_image = cv_image->image;
+  //cv::Mat undistorted_image;
+  //cv::undistort(in_image, current_frame_, camera_instrinsics_, distortion_coefficients_);
+  image_frame_id_vector_[camera_id] = in_image_msg->header.frame_id;
+  current_image_vector_[camera_id] = cv_image->image;
+  image_size_.height = current_frame_.rows;
+  image_size_.width = current_frame_.cols;
 
-	cv::Mat undistorted_image;
-	cv::undistort(in_image, current_frame_, camera_instrinsics_, distortion_coefficients_);
+}
 
-	image_frame_id_ = in_image_msg->header.frame_id;
-	image_size_.height = current_frame_.rows;
-	image_size_.width = current_frame_.cols;
+void RosPixelCloudFusionApp::ImageCallback0(const sensor_msgs::Image::ConstPtr &in_image_msg)
+{
+  SaveCurrentImageFrame(in_image_msg, 0);
+}
+
+void RosPixelCloudFusionApp::ImageCallback1(const sensor_msgs::Image::ConstPtr &in_image_msg)
+{
+  SaveCurrentImageFrame(in_image_msg, 1);
 }
 
 void RosPixelCloudFusionApp::CloudCallback(const sensor_msgs::PointCloud2::ConstPtr &in_cloud_msg)
@@ -136,34 +149,52 @@ void RosPixelCloudFusionApp::CloudCallback(const sensor_msgs::PointCloud2::Const
 	publisher_fused_cloud_.publish(cloud_msg);
 }
 
-void RosPixelCloudFusionApp::IntrinsicsCallback(const sensor_msgs::CameraInfo &in_message)
+void RosPixelCloudFusionApp::SaveCameraInfo(const sensor_msgs::CameraInfo& in_message, int camera_id)
 {
-	image_size_.height = in_message.height;
-	image_size_.width = in_message.width;
+  // use frame_id to check what camera_info received
+  image_size_.height = in_message.height;
+  image_size_.width = in_message.width;
+  camera_instrinsics_vector_[camera_id] = cv::Mat(3, 3, CV_64F);
+  for (int row = 0; row < 3; row++)
+  {
+    for (int col = 0; col < 3; col++)
+    {
+      camera_instrinsics_vector_[camera_id].at<double>(row, col) = in_message.K[row * 3 + col];
+    }
+  }
 
-	camera_instrinsics_ = cv::Mat(3, 3, CV_64F);
-	for (int row = 0; row < 3; row++)
-	{
-		for (int col = 0; col < 3; col++)
-		{
-			camera_instrinsics_.at<double>(row, col) = in_message.K[row * 3 + col];
-		}
-	}
+  //standard or fisheye camera coefficient
+  int dim = (in_message.distortion_model == "fish_eye") ? 4:5;
 
-	distortion_coefficients_ = cv::Mat(1, 5, CV_64F);
-	for (int col = 0; col < 5; col++)
-	{
-		distortion_coefficients_.at<double>(col) = in_message.D[col];
-	}
+  distortion_coefficients_vector_[camera_id] = cv::Mat(1, dim, CV_64F);
+  for (int col = 0; col < dim; col++)
+  {
+    distortion_coefficients_vector_[camera_id].at<double>(col) = in_message.D[col];
+  }
 
-	fx_ = static_cast<float>(in_message.P[0]);
-	fy_ = static_cast<float>(in_message.P[5]);
-	cx_ = static_cast<float>(in_message.P[2]);
-	cy_ = static_cast<float>(in_message.P[6]);
+  //projection matrix(use camera_intrinsic)
+  //fx_ = static_cast<float>(in_message.P[0]);
+  //fy_ = static_cast<float>(in_message.P[5]);
+  //cx_ = static_cast<float>(in_message.P[2]);
+  //cy_ = static_cast<float>(in_message.P[6]);
 
-	intrinsics_subscriber_.shutdown();
-	camera_info_ok_ = true;
-	ROS_INFO("[%s] CameraIntrinsics obtained.", __APP_NAME__);
+  // no more subscription needed
+  intrinsics_subscriber_vector_[camera_id].shutdown();
+  //camera_info_ok_ = true;
+  camera_info_counter++;
+  ROS_INFO("[%s] CameraIntrinsics obtained.", __APP_NAME__);
+
+}
+
+
+void RosPixelCloudFusionApp::IntrinsicsCallback0(const sensor_msgs::CameraInfo &in_message)
+{
+  SaveCameraInfo(in_message, 0);
+}
+
+void RosPixelCloudFusionApp::IntrinsicsCallback1(const sensor_msgs::CameraInfo &in_message)
+{
+  SaveCameraInfo(in_message, 1);
 }
 
 tf::StampedTransform
@@ -188,16 +219,44 @@ RosPixelCloudFusionApp::FindTransform(const std::string &in_target_frame, const 
 
 void RosPixelCloudFusionApp::InitializeRosIo(ros::NodeHandle &in_private_handle)
 {
+  //get params vector for multiple cameras
+  //image topics
+  in_private_handle.getParam("/cam_topics", image_topics_vector_);
+  ROS_ASSERT(image_topics_vector_.getType() == XmlRpc::XmlRpcValue::TypeArray);
+  //camera infos
+  in_private_handle.getParam("/cam_infos", caminfo_topics_vector_);
+  ROS_ASSERT(caminfo_topics_vector_.getType() == XmlRpc::XmlRpcValue::TypeArray);
+  //check if there is a same number of cameras and camera info
+  ROS_ASSERT(image_topics_vector_.size() == caminfo_topics_vector_.size());
+
+  //init how many cameras use for lidar color
+  numcamera_ = image_topics_vector_.size();
+  //init size of tf camera name vector
+  image_frame_id_vector_ = std::vector<std::string>(numcamera_);
+  //init size of current image frame vector
+  current_image_vector_  = std::vector<cv::Mat>(numcamera_);
+  //init size of camera intrinsic vector
+  camera_instrinsics_vector_ = std::vector<cv::Mat>(numcamera_);
+  //init size of camera projection vector
+  camera_projection_vector_  = std::vector<cv::Mat>(numcamera_);
+  //init size of distortion vector
+  distortion_coefficients_vector_ = std::vector<cv::Mat>(numcamera_);
+  //init intrinsic subscriber vector
+  intrinsics_subscriber_vector_ = std::vector<ros::Subscriber>(numcamera_);
+  //init image subscriber vector
+  image_subscriber_vector_ = std::vector<ros::Subscriber>(numcamera_);
+
+
 	//get params
-	std::string points_src, image_src, camera_info_src, fused_topic_str = "/points_fused";
+  std::string points_src, image_src, camera_info_src, fused_topic_str = "/points_fused";
 	std::string name_space_str = ros::this_node::getNamespace();
 
 	ROS_INFO("[%s] This node requires: Registered TF(Lidar-Camera), CameraInfo, Image, and PointCloud.", __APP_NAME__);
 	in_private_handle.param<std::string>("points_src", points_src, "/points_raw");
 	ROS_INFO("[%s] points_src: %s", __APP_NAME__, points_src.c_str());
 
-	in_private_handle.param<std::string>("image_src", image_src, "/image_rectified");
-	ROS_INFO("[%s] image_src: %s", __APP_NAME__, image_src.c_str());
+  in_private_handle.param<std::string>("image_src", image_src, "/image_rectified");
+  ROS_INFO("[%s] image_src: %s", __APP_NAME__, image_src.c_str());
 
 	in_private_handle.param<std::string>("camera_info_src", camera_info_src, "/camera_info");
 	ROS_INFO("[%s] camera_info_src: %s", __APP_NAME__, camera_info_src.c_str());
@@ -208,28 +267,45 @@ void RosPixelCloudFusionApp::InitializeRosIo(ros::NodeHandle &in_private_handle)
 		{
 			name_space_str.erase(name_space_str.begin());
 		}
-		image_src = name_space_str + image_src;
+    image_src = name_space_str + image_src;
 		fused_topic_str = name_space_str + fused_topic_str;
 		camera_info_src = name_space_str + camera_info_src;
 	}
 
 	//generate subscribers and sychronizers
-	ROS_INFO("[%s] Subscribing to... %s", __APP_NAME__, camera_info_src.c_str());
-	intrinsics_subscriber_ = in_private_handle.subscribe(camera_info_src,
-	                                                     1,
-	                                                     &RosPixelCloudFusionApp::IntrinsicsCallback, this);
+  ROS_INFO("[%s] Subscribing to... %s", __APP_NAME__, static_cast<std::string>(caminfo_topics_vector_[0]).c_str());
+  intrinsics_subscriber_vector_[0] = in_private_handle.subscribe(static_cast<std::string>(caminfo_topics_vector_[0]),1,
+                                     &RosPixelCloudFusionApp::IntrinsicsCallback0, this);
+  ROS_INFO("[%s] Subscribing to... %s", __APP_NAME__, static_cast<std::string>(caminfo_topics_vector_[1]).c_str());
+  intrinsics_subscriber_vector_[1] = in_private_handle.subscribe(static_cast<std::string>(caminfo_topics_vector_[1]),1,
+                                     &RosPixelCloudFusionApp::IntrinsicsCallback1, this);
 
-	ROS_INFO("[%s] Subscribing to... %s", __APP_NAME__, image_src.c_str());
-	cloud_subscriber_ = in_private_handle.subscribe(image_src,
-	                                                1,
-	                                                &RosPixelCloudFusionApp::ImageCallback, this);
+  ROS_INFO("[%s] Subscribing to... %s", __APP_NAME__, static_cast<std::string>(image_topics_vector_[0]).c_str());
+  image_subscriber_vector_[0] = in_private_handle.subscribe(static_cast<std::string>(image_topics_vector_[0]),1,
+                      &RosPixelCloudFusionApp::ImageCallback0, this);
+  ROS_INFO("[%s] Subscribing to... %s", __APP_NAME__, static_cast<std::string>(image_topics_vector_[1]).c_str());
+  image_subscriber_vector_[1] = in_private_handle.subscribe(static_cast<std::string>(image_topics_vector_[1]),1,
+                      &RosPixelCloudFusionApp::ImageCallback1, this);
+
 	ROS_INFO("[%s] Subscribing to... %s", __APP_NAME__, points_src.c_str());
-	image_subscriber_ = in_private_handle.subscribe(points_src,
-	                                                1,
-	                                                &RosPixelCloudFusionApp::CloudCallback, this);
+  cloud_subscriber_ = in_private_handle.subscribe(points_src, 1,
+                                                  &RosPixelCloudFusionApp::CloudCallback, this);
 
 	publisher_fused_cloud_ = node_handle_.advertise<sensor_msgs::PointCloud2>(fused_topic_str, 1);
 	ROS_INFO("[%s] Publishing fused pointcloud in %s", __APP_NAME__, fused_topic_str.c_str());
+
+
+  // Multiple subscriptions
+  /*
+  for(int i=0;i<image_topics_vector_.size();i++)
+  {
+    intrinsics_subscriber_vector_.push_back(in_private_handle.subscribe(caminfo_topics_vector_[i], 1,
+                                                         &RosPixelCloudFusionApp::IntrinsicsCallback, this));
+
+    image_subscriber_vector_.push_back(in_private_handle.subscribe(image_topics_vector_[i], 1,
+                                                                   &RosPixelCloudFusionApp::ImageCallback, this));
+  }*/
+
 
 }
 

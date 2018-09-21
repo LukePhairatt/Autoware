@@ -70,6 +70,9 @@
 #include <opencv2/calib3d/calib3d.hpp>
 
 #include <Eigen/Eigen>
+#include <atomic>
+
+std::atomic<int>                    camera_info_counter(0);
 
 namespace std {
 	template <>
@@ -80,6 +83,13 @@ namespace std {
 			return hash<std::string>()( std::to_string(pixel_cloud.x) + "|" + std::to_string(pixel_cloud.y) );
 		}
 	};
+};
+
+//NOT USE
+class RosCallBack
+{
+  public:
+    void ImageCallback(const sensor_msgs::Image::ConstPtr &in_image_msg);
 };
 
 class RosPixelCloudFusionApp
@@ -96,11 +106,12 @@ class RosPixelCloudFusionApp
 	cv::Mat                             distortion_coefficients_;
 	cv::Mat                             current_frame_;
 
-	std::string 						image_frame_id_;
+  std::string 						            image_frame_id_;
 
 	bool                                processing_;
 	bool                                camera_info_ok_;
 	bool                                camera_lidar_tf_ok_;
+
 
 	float                               fx_, fy_, cx_, cy_;
 	pcl::PointCloud<pcl::PointXYZRGB>   colored_cloud_;
@@ -114,9 +125,18 @@ class RosPixelCloudFusionApp
 
 	pcl::PointXYZ TransformPoint(const pcl::PointXYZ &in_point, const tf::StampedTransform &in_transform);
 
-	void ImageCallback(const sensor_msgs::Image::ConstPtr &in_image_msg);
-
+  void ImageCallback0(const sensor_msgs::Image::ConstPtr &in_image_msg);
+  void ImageCallback1(const sensor_msgs::Image::ConstPtr &in_image_msg);
+  void IntrinsicsCallback0(const sensor_msgs::CameraInfo& in_message);
+  void IntrinsicsCallback1(const sensor_msgs::CameraInfo& in_message);
 	void CloudCallback(const sensor_msgs::PointCloud2::ConstPtr &in_cloud_msg);
+
+  /*!
+   *  Helper functions
+   */
+  void SaveCurrentImageFrame(const sensor_msgs::Image::ConstPtr &in_image_msg, int camera_id);
+  void SaveCameraInfo(const sensor_msgs::CameraInfo& in_message, int camera_id);
+  bool IsCamInfoReady();
 
 	/*!
 	 * Obtains Transformation between two transforms registered in the TF Tree
@@ -127,13 +147,33 @@ class RosPixelCloudFusionApp
 	tf::StampedTransform
 	FindTransform(const std::string &in_target_frame, const std::string &in_source_frame);
 
-	void IntrinsicsCallback(const sensor_msgs::CameraInfo& in_message);
+
 
 	/*!
 	 * Reads the config params from the command line
 	 * @param in_private_handle
 	 */
 	void InitializeRosIo(ros::NodeHandle &in_private_handle);
+
+  /*!
+    * Subscribers: Camera image topics, Camera info, tf image frame id
+    */
+  XmlRpc::XmlRpcValue           image_topics_vector_;             //image topic
+  XmlRpc::XmlRpcValue           caminfo_topics_vector_;           //camera info
+  std::vector<std::string> 			image_frame_id_vector_;           //tf image frame id (read from in_image->header.frame_id)
+  std::vector<ros::Subscriber>  intrinsics_subscriber_vector_;    //caminfo subscriber nodes
+  std::vector<ros::Subscriber>  image_subscriber_vector_;         //image subscriber nodes
+
+
+  /*!
+    * Variables: Camera params for a projection
+    */
+  int                           numcamera_;
+  std::vector<cv::Mat>          camera_instrinsics_vector_;           //aka camera matrix, K (fx,cx,fy,cy)
+  std::vector<cv::Mat>          distortion_coefficients_vector_;      //distortion params
+  std::vector<cv::Mat>          current_image_vector_;                //current image data
+  std::vector<cv::Mat>          camera_projection_vector_;            //aka projection matrix, P
+  //friend class                  RosCallBack;                        //permission to access
 
 public:
 	void Run();

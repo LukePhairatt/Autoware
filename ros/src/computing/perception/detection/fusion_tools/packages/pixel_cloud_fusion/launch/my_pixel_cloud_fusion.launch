@@ -1,4 +1,7 @@
 <launch>
+    <rosparam param="cam_topics"> ['/gmsl_image_raw_0_0', '/gmsl_image_raw_0_1'] </rosparam>
+    <rosparam param="cam_infos"> ['/camera_info_00', '/camera_info_01'] </rosparam>
+    
     <arg name="points_src" default="/points_raw" /> <!-- PointCloud source topic-->
     <arg name="image_src" default="/gmsl_image_alt_0_0" /> <!-- Raw Image source topic to be rectified-->
     <arg name="camera_info_src" default="/camera_info" /> <!-- CameraInfo source topic-->

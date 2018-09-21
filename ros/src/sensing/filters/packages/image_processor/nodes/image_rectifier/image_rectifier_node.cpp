@@ -55,22 +55,44 @@ class RosImageRectifierApp
 	cv::Size            image_size_;
 	cv::Mat             camera_instrinsics_;
 	cv::Mat             distortion_coefficients_;
+	std::string 				distortion_model_;
 
 
 	void ImageCallback(const sensor_msgs::Image& in_image_sensor)
-	{
+	{		
 		//Receive Image, convert it to OpenCV Mat
 		cv_bridge::CvImagePtr cv_image = cv_bridge::toCvCopy(in_image_sensor, "bgr8");
 		cv::Mat tmp_image = cv_image->image;
 		cv::Mat image;
-		if (camera_instrinsics_.empty())
+
+		if (camera_instrinsics_.empty() || distortion_model_.empty())
 		{
 			ROS_INFO("[%s] Make sure camera_info is being published in the specified topic", _NODE_NAME_);
 			image = tmp_image;
 		}
 		else
 		{
-			cv::undistort(tmp_image, image, camera_instrinsics_, distortion_coefficients_);
+			// apply fisheye or standard model
+			if(distortion_model_ == "fish_eye")
+			{
+        //this doesn't work
+        //cv::fisheye::undistortImage(tmp_image, image, camera_instrinsics_, distortion_coefficients_);
+
+        //remap works
+        cv::Mat newCamMat, map1, map2;
+        cv::Size imageSize(640,480);
+        cv::fisheye::estimateNewCameraMatrixForUndistortRectify(camera_instrinsics_, distortion_coefficients_, imageSize,
+                                                                cv::Matx33d::eye(), newCamMat, 1);
+        cv::fisheye::initUndistortRectifyMap(camera_instrinsics_, distortion_coefficients_, cv::Matx33d::eye(), newCamMat,
+                                             imageSize, CV_16SC2, map1, map2);
+        remap(tmp_image, image, map1, map2, cv::INTER_LINEAR);
+
+			}
+			else
+			{
+				cv::undistort(tmp_image, image, camera_instrinsics_, distortion_coefficients_);
+			}
+			
 		}
 
 		cv_bridge::CvImage out_msg;
@@ -86,7 +108,7 @@ class RosImageRectifierApp
 	{
 		image_size_.height = in_message.height;
 		image_size_.width = in_message.width;
-
+    distortion_model_ = in_message.distortion_model;
 		camera_instrinsics_ = cv::Mat(3,3, CV_64F);
 		for (int row=0; row<3; row++) {
 			for (int col=0; col<3; col++) {
@@ -94,10 +116,13 @@ class RosImageRectifierApp
 			}
 		}
 
-		distortion_coefficients_ = cv::Mat(1,5,CV_64F);
-		for (int col=0; col<5; col++) {
-			distortion_coefficients_.at<double>(col) = in_message.D[col];
-		}
+    // Different coeff dimension
+    int dim = (distortion_model_ == "fish_eye") ? 4:5;
+
+    distortion_coefficients_ = cv::Mat(1,dim,CV_64F);
+    for (int col=0; col<dim; col++) {
+      distortion_coefficients_.at<double>(col) = in_message.D[col];
+    }
 	}
 
 public:

@@ -1,0 +1,12 @@
+<!-- Launch file for Image Rectifier -->
+<launch>
+
+    <arg name="image_src" default="/gmsl_image_raw_0_2" />
+    <arg name="camera_info_src" default="/camera_info_02" />
+
+    <!-- rosrun image_processor image_rotator -->
+    <node pkg="image_processor" type="image_rectifier" name="image_rectifier" output="screen">
+        <param name="image_src" value="$(arg image_src)" />
+        <param name="camera_info_src" value="$(arg camera_info_src)" />
+    </node>
+</launch>
