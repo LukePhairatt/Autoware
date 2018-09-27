@@ -1,23 +1,18 @@
+<?xml version="1.0"?>
 <launch>
-    <rosparam param="cam_topics"> ['/gmsl_image_raw_0_0', '/gmsl_image_raw_0_1'] </rosparam>
-    <rosparam param="cam_infos"> ['/camera_info_00', '/camera_info_01'] </rosparam>
+    <!-- this node publishes undistored images 
+    <include file="$(find image_processor)/launch/image_rectifier_gmsl.launch" />
+    --> 
     
-    <arg name="points_src" default="/points_raw" /> <!-- PointCloud source topic-->
-    <arg name="image_src" default="/gmsl_image_alt_0_0" /> <!-- Raw Image source topic to be rectified-->
-    <arg name="camera_info_src" default="/camera_info" /> <!-- CameraInfo source topic-->
+    <!-- this node publishes rgb point cloud "/points_fused" whatever camera you put here will be used for colorising RGB -->
+    <arg name="points_src" default="/velodyne_points" /> 																			<!-- PointCloud source topic-->
 
-    <!-- this node publishes undistored image "/image_rectified" 
-    <node name="autoware_image_rectifier" pkg="image_processor" type="image_rectifier" output="screen">
-        <param name="image_src" value="$(arg image_src)" />
-        <param name="camera_info_src" value="$(arg camera_info_src)" />
-    </node>
-    -->
+    <rosparam param="cam_topics"> ['/gmsl_image_raw_0_0', '/gmsl_image_raw_0_1', '/gmsl_image_raw_0_2', '/gmsl_image_raw_0_3','/gmsl_image_raw_1_0', '/gmsl_image_raw_1_1', '/gmsl_image_raw_1_2', '/gmsl_image_raw_1_3'] </rosparam> 	<!-- Image source topic-->
+    <rosparam param="cam_infos"> ['/camera_info_00', '/camera_info_01', '/camera_info_02', '/camera_info_03', '/camera_info_10', '/camera_info_11', '/camera_info_12', '/camera_info_13'] </rosparam>						<!-- Camera info topic-->
 
-    <!-- this node publishes rgb point cloud "/points_fused" -->
-    <node name="pixel_cloud_fusion_01" pkg="pixel_cloud_fusion" type="pixel_cloud_fusion" output="screen">
+    
+    <node name="pixel_cloud_fusion" pkg="pixel_cloud_fusion" type="pixel_cloud_fusion" output="screen">
         <param name="points_src" value="$(arg points_src)" />
-        <param name="image_src" value="$(arg image_src)" />
-        <param name="camera_info_src" value="$(arg camera_info_src)" />
     </node>
-
+		
 </launch>

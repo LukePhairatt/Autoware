@@ -1,12 +1,32 @@
+<?xml version="1.0"?>
 <!-- Launch file for Image Rectifier -->
 <launch>
-
-    <arg name="image_src" default="/gmsl_image_raw_0_2" />
-    <arg name="camera_info_src" default="/camera_info_02" />
-
+    <arg name="image_src_00" default="/gmsl_image_raw_0_0" />
+    <arg name="camera_info_src_00" default="/camera_info_00" />
+    <arg name="image_rectified_out_00" default="/image_rectified_00" />
+    
+    <arg name="image_src_01" default="/gmsl_image_raw_0_1" />
+    <arg name="camera_info_src_01" default="/camera_info_01" />
+    <arg name="image_rectified_out_01" default="/image_rectified_01" />
+    
+    <arg name="image_src_02" default="/gmsl_image_raw_0_2" />
+    <arg name="camera_info_src_02" default="/camera_info_02" />
+    <arg name="image_rectified_out_02" default="/image_rectified_02" />
+    
     <!-- rosrun image_processor image_rotator -->
-    <node pkg="image_processor" type="image_rectifier" name="image_rectifier" output="screen">
-        <param name="image_src" value="$(arg image_src)" />
-        <param name="camera_info_src" value="$(arg camera_info_src)" />
+    <node pkg="image_processor" type="image_rectifier" name="image_rectifier_00" output="screen">
+        <param name="image_src" value="$(arg image_src_00)" />
+        <param name="camera_info_src" value="$(arg camera_info_src_00)" />
+        <param name="image_rectified" value="$(arg image_rectified_out_00)" />
+    </node>
+    <node pkg="image_processor" type="image_rectifier" name="image_rectifier_01" output="screen">
+        <param name="image_src" value="$(arg image_src_01)" />
+        <param name="camera_info_src" value="$(arg camera_info_src_01)" />
+        <param name="image_rectified" value="$(arg image_rectified_out_01)" />
+    </node>
+    <node pkg="image_processor" type="image_rectifier" name="image_rectifier_02" output="screen">
+        <param name="image_src" value="$(arg image_src_02)" />
+        <param name="camera_info_src" value="$(arg camera_info_src_02)" />
+        <param name="image_rectified" value="$(arg image_rectified_out_02)" />
     </node>
 </launch>

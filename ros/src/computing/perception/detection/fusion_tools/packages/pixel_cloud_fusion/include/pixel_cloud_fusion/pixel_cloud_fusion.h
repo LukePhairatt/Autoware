@@ -113,7 +113,7 @@ class RosPixelCloudFusionApp
 	bool                                camera_lidar_tf_ok_;
 
 
-	float                               fx_, fy_, cx_, cy_;
+  //float                               fx_, fy_, cx_, cy_;
 	pcl::PointCloud<pcl::PointXYZRGB>   colored_cloud_;
 
 	typedef
@@ -127,8 +127,23 @@ class RosPixelCloudFusionApp
 
   void ImageCallback0(const sensor_msgs::Image::ConstPtr &in_image_msg);
   void ImageCallback1(const sensor_msgs::Image::ConstPtr &in_image_msg);
+  void ImageCallback2(const sensor_msgs::Image::ConstPtr &in_image_msg);
+  void ImageCallback3(const sensor_msgs::Image::ConstPtr &in_image_msg);
+  void ImageCallback4(const sensor_msgs::Image::ConstPtr &in_image_msg);
+  void ImageCallback5(const sensor_msgs::Image::ConstPtr &in_image_msg);
+  void ImageCallback6(const sensor_msgs::Image::ConstPtr &in_image_msg);
+  void ImageCallback7(const sensor_msgs::Image::ConstPtr &in_image_msg);
+
   void IntrinsicsCallback0(const sensor_msgs::CameraInfo& in_message);
   void IntrinsicsCallback1(const sensor_msgs::CameraInfo& in_message);
+  void IntrinsicsCallback2(const sensor_msgs::CameraInfo& in_message);
+  void IntrinsicsCallback3(const sensor_msgs::CameraInfo& in_message);
+  void IntrinsicsCallback4(const sensor_msgs::CameraInfo& in_message);
+  void IntrinsicsCallback5(const sensor_msgs::CameraInfo& in_message);
+  void IntrinsicsCallback6(const sensor_msgs::CameraInfo& in_message);
+  void IntrinsicsCallback7(const sensor_msgs::CameraInfo& in_message);
+
+
 	void CloudCallback(const sensor_msgs::PointCloud2::ConstPtr &in_cloud_msg);
 
   /*!
@@ -144,9 +159,8 @@ class RosPixelCloudFusionApp
 	 * @param in_source_frame
 	 * @return the found transformation in the tree
 	 */
-	tf::StampedTransform
-	FindTransform(const std::string &in_target_frame, const std::string &in_source_frame);
-
+  tf::StampedTransform FindTransform(const std::string &in_target_frame, const std::string &in_source_frame, bool& found_tf);
+  bool LookupTFCameraTransform(const sensor_msgs::PointCloud2::ConstPtr &in_cloud_msg);
 
 
 	/*!
@@ -168,13 +182,14 @@ class RosPixelCloudFusionApp
   /*!
     * Variables: Camera params for a projection
     */
-  int                           numcamera_;
-  std::vector<cv::Mat>          camera_instrinsics_vector_;           //aka camera matrix, K (fx,cx,fy,cy)
-  std::vector<cv::Mat>          distortion_coefficients_vector_;      //distortion params
-  std::vector<cv::Mat>          current_image_vector_;                //current image data
-  std::vector<cv::Mat>          camera_projection_vector_;            //aka projection matrix, P
-  //friend class                  RosCallBack;                        //permission to access
-
+  int                               numcamera_;
+  std::vector<cv::Mat>              camera_instrinsics_vector_;         //aka camera matrix, K (fx,cx,fy,cy)
+  std::vector<std::string>          distortion_model_vector_;
+  std::vector<cv::Mat>              distortion_coefficients_vector_;    //distortion params
+  std::vector<cv::Mat>              current_image_vector_;              //current image data
+  std::vector<cv::Mat>              camera_projection_vector_;          //aka projection matrix, P
+  //friend class                    RosCallBack;                        //permission to access
+  std::vector<tf::StampedTransform> camera_lidar_tf_vector_;            //tf cameras-lidar transform
 public:
 	void Run();
 	RosPixelCloudFusionApp();

@@ -115,6 +115,8 @@ static double current_velocity_imu_y = 0.0;
 static double current_velocity_imu_z = 0.0;
 
 static pcl::PointCloud<pcl::PointXYZI> map;
+static pcl::PointCloud<pcl::PointXYZRGB> map_color;
+
 
 static pcl::NormalDistributionsTransform<pcl::PointXYZI, pcl::PointXYZI> ndt;
 static cpu::NormalDistributionsTransform<pcl::PointXYZI, pcl::PointXYZI> anh_ndt;
@@ -206,12 +208,16 @@ static void output_callback(const autoware_msgs::ConfigNdtMappingOutput::ConstPt
   std::cout << "filter_res: " << filter_res << std::endl;
   std::cout << "filename: " << filename << std::endl;
 
+
   pcl::PointCloud<pcl::PointXYZI>::Ptr map_ptr(new pcl::PointCloud<pcl::PointXYZI>(map));
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr map_color_ptr(new pcl::PointCloud<pcl::PointXYZRGB>(map_color));
   pcl::PointCloud<pcl::PointXYZI>::Ptr map_filtered(new pcl::PointCloud<pcl::PointXYZI>());
   map_ptr->header.frame_id = "map";
+  map_color_ptr->header.frame_id = "map";
   map_filtered->header.frame_id = "map";
   sensor_msgs::PointCloud2::Ptr map_msg_ptr(new sensor_msgs::PointCloud2);
 
+  pcl::toROSMsg(*map_ptr, *map_msg_ptr);
   // Apply voxelgrid filter
   if (filter_res == 0.0)
   {
@@ -229,7 +235,9 @@ static void output_callback(const autoware_msgs::ConfigNdtMappingOutput::ConstPt
     pcl::toROSMsg(*map_filtered, *map_msg_ptr);
   }
 
-  ndt_map_pub.publish(*map_msg_ptr);
+  //Disable this for now
+  //ndt_map_pub.publish(*map_msg_ptr);
+
 
   // Writing Point Cloud data to PCD file
   if (filter_res == 0.0)
@@ -466,11 +474,17 @@ static void imu_callback(const sensor_msgs::Imu::Ptr& input)
 
 static void points_callback(const sensor_msgs::PointCloud2::ConstPtr& input)
 {
+  // color points
+  pcl::PointXYZRGB p_color;
+  pcl::PointCloud<pcl::PointXYZRGB> tmp_color, scan_color;
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr transformed_scan_color_ptr(new pcl::PointCloud<pcl::PointXYZRGB>());
+  // intensity points
   double r;
   pcl::PointXYZI p;
   pcl::PointCloud<pcl::PointXYZI> tmp, scan;
   pcl::PointCloud<pcl::PointXYZI>::Ptr filtered_scan_ptr(new pcl::PointCloud<pcl::PointXYZI>());
   pcl::PointCloud<pcl::PointXYZI>::Ptr transformed_scan_ptr(new pcl::PointCloud<pcl::PointXYZI>());
+
   tf::Quaternion q;
 
   Eigen::Matrix4f t_localizer(Eigen::Matrix4f::Identity());
@@ -480,29 +494,46 @@ static void points_callback(const sensor_msgs::PointCloud2::ConstPtr& input)
 
   current_scan_time = input->header.stamp;
 
-  pcl::fromROSMsg(*input, tmp);
+  // we are expecting XYZRGB
+  pcl::fromROSMsg(*input, tmp_color);
 
-  for (pcl::PointCloud<pcl::PointXYZI>::const_iterator item = tmp.begin(); item != tmp.end(); item++)
+  for (pcl::PointCloud<pcl::PointXYZRGB>::const_iterator item = tmp_color.begin(); item != tmp_color.end(); item++)
   {
+    // Normal cloud intensity
     p.x = (double)item->x;
     p.y = (double)item->y;
     p.z = (double)item->z;
-    p.intensity = (double)item->intensity;
+    p.intensity = (double)item->r;
+
+    // RGB cloud
+    p_color.x = p.x;
+    p_color.y = p.y;
+    p_color.z = p.z;
+    p_color.r = item->r;
+    p_color.g = item->g;
+    p_color.b = item->b;
+
+    //std::cout << "r: " << p_color.r << "g: " << p_color.g << "b: " << p_color.b << std::endl;
 
     r = sqrt(pow(p.x, 2.0) + pow(p.y, 2.0));
     if (min_scan_range < r && r < max_scan_range)
     {
       scan.push_back(p);
+      scan_color.push_back(p_color);
     }
   }
 
   pcl::PointCloud<pcl::PointXYZI>::Ptr scan_ptr(new pcl::PointCloud<pcl::PointXYZI>(scan));
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr scan_color_ptr(new pcl::PointCloud<pcl::PointXYZRGB>(scan_color));
 
   // Add initial point cloud to velodyne_map
   if (initial_scan_loaded == 0)
   {
     pcl::transformPointCloud(*scan_ptr, *transformed_scan_ptr, tf_btol);
     map += *transformed_scan_ptr;
+    pcl::transformPointCloud(*scan_color_ptr, *transformed_scan_color_ptr, tf_btol);
+    map_color += *transformed_scan_color_ptr;
+
     initial_scan_loaded = 1;
   }
 
@@ -513,6 +544,7 @@ static void points_callback(const sensor_msgs::PointCloud2::ConstPtr& input)
   voxel_grid_filter.filter(*filtered_scan_ptr);
 
   pcl::PointCloud<pcl::PointXYZI>::Ptr map_ptr(new pcl::PointCloud<pcl::PointXYZI>(map));
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr map_color_ptr(new pcl::PointCloud<pcl::PointXYZRGB>(map_color));
 
   if (_method_type == MethodType::PCL_GENERIC)
   {
@@ -650,6 +682,7 @@ static void points_callback(const sensor_msgs::PointCloud2::ConstPtr& input)
   t_base_link = t_localizer * tf_ltob;
 
   pcl::transformPointCloud(*scan_ptr, *transformed_scan_ptr, t_localizer);
+  pcl::transformPointCloud(*scan_color_ptr, *transformed_scan_color_ptr, t_localizer);
 
   tf::Matrix3x3 mat_l, mat_b;
 
@@ -766,6 +799,8 @@ static void points_callback(const sensor_msgs::PointCloud2::ConstPtr& input)
   if (shift >= min_add_scan_shift)
   {
     map += *transformed_scan_ptr;
+    map_color += *transformed_scan_color_ptr;
+
     added_pose.x = current_pose.x;
     added_pose.y = current_pose.y;
     added_pose.z = current_pose.z;
@@ -792,9 +827,16 @@ static void points_callback(const sensor_msgs::PointCloud2::ConstPtr& input)
 #endif
   }
 
-  sensor_msgs::PointCloud2::Ptr map_msg_ptr(new sensor_msgs::PointCloud2);
-  pcl::toROSMsg(*map_ptr, *map_msg_ptr);
-  ndt_map_pub.publish(*map_msg_ptr);
+  // Publishing intensity map
+  //sensor_msgs::PointCloud2::Ptr map_msg_ptr(new sensor_msgs::PointCloud2);
+  //pcl::toROSMsg(*map_ptr, *map_msg_ptr);
+  //ndt_map_pub.publish(*map_msg_ptr);
+
+  // Publishing color map
+  sensor_msgs::PointCloud2::Ptr map_color_msg_ptr(new sensor_msgs::PointCloud2);
+  pcl::toROSMsg(*map_color_ptr, *map_color_msg_ptr);
+  ndt_map_pub.publish(*map_color_msg_ptr);
+
 
   q.setRPY(current_pose.roll, current_pose.pitch, current_pose.yaw);
   current_pose_msg.header.frame_id = "map";
@@ -1049,13 +1091,14 @@ int main(int argc, char** argv)
   tf_ltob = (tl_ltob * rot_z_ltob * rot_y_ltob * rot_x_ltob).matrix();
 
   map.header.frame_id = "map";
+  map_color.header.frame_id = "map";
 
   ndt_map_pub = nh.advertise<sensor_msgs::PointCloud2>("/ndt_map", 1000);
   current_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/current_pose", 1000);
 
   ros::Subscriber param_sub = nh.subscribe("config/ndt_mapping", 10, param_callback);
   ros::Subscriber output_sub = nh.subscribe("config/ndt_mapping_output", 10, output_callback);
-  ros::Subscriber points_sub = nh.subscribe("points_raw", 100000, points_callback);
+  ros::Subscriber points_sub = nh.subscribe("points_fused", 100000, points_callback);
   ros::Subscriber odom_sub = nh.subscribe("/vehicle/odom", 100000, odom_callback);
   ros::Subscriber imu_sub = nh.subscribe(_imu_topic, 100000, imu_callback);
 
