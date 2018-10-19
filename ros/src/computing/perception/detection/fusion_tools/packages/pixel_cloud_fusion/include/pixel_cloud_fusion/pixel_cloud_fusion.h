@@ -92,8 +92,14 @@ class RosCallBack
     void ImageCallback(const sensor_msgs::Image::ConstPtr &in_image_msg);
 };
 
+template <class T>
 class RosPixelCloudFusionApp
 {
+public:
+	void Run();
+	RosPixelCloudFusionApp();
+
+private:
 	ros::NodeHandle                     node_handle_;
 	ros::Publisher                      publisher_fused_cloud_;
 	ros::Subscriber                     intrinsics_subscriber_;
@@ -111,6 +117,7 @@ class RosPixelCloudFusionApp
 	bool                                processing_;
 	bool                                camera_info_ok_;
 	bool                                camera_lidar_tf_ok_;
+	std::string 												image_type_;
 
 
   //float                               fx_, fy_, cx_, cy_;
@@ -119,29 +126,30 @@ class RosPixelCloudFusionApp
 	typedef
 	message_filters::sync_policies::ApproximateTime<sensor_msgs::PointCloud2, sensor_msgs::Image> SyncPolicyT;
 
-	ros::Subscriber                     cloud_subscriber_;
-	ros::Subscriber                     image_subscriber_;
-	message_filters::Synchronizer<SyncPolicyT>              *cloud_synchronizer_;
+	ros::Subscriber                     					cloud_subscriber_;
+	ros::Subscriber                     					image_subscriber_;
+	message_filters::Synchronizer<SyncPolicyT>    *cloud_synchronizer_;
 
 	pcl::PointXYZ TransformPoint(const pcl::PointXYZ &in_point, const tf::StampedTransform &in_transform);
+	
+	//void ImageCallback0(const sensor_msgs::Image::ConstPtr &in_image_msg);
+  void ImageCallback0(const T &in_image_msg);
+  void ImageCallback1(const T &in_image_msg);
+  void ImageCallback2(const T &in_image_msg);
+  void ImageCallback3(const T &in_image_msg);
+  void ImageCallback4(const T &in_image_msg);
+  void ImageCallback5(const T &in_image_msg);
+  void ImageCallback6(const T &in_image_msg);
+  void ImageCallback7(const T &in_image_msg);
 
-  void ImageCallback0(const sensor_msgs::Image::ConstPtr &in_image_msg);
-  void ImageCallback1(const sensor_msgs::Image::ConstPtr &in_image_msg);
-  void ImageCallback2(const sensor_msgs::Image::ConstPtr &in_image_msg);
-  void ImageCallback3(const sensor_msgs::Image::ConstPtr &in_image_msg);
-  void ImageCallback4(const sensor_msgs::Image::ConstPtr &in_image_msg);
-  void ImageCallback5(const sensor_msgs::Image::ConstPtr &in_image_msg);
-  void ImageCallback6(const sensor_msgs::Image::ConstPtr &in_image_msg);
-  void ImageCallback7(const sensor_msgs::Image::ConstPtr &in_image_msg);
-
-  void IntrinsicsCallback0(const sensor_msgs::CameraInfo& in_message);
-  void IntrinsicsCallback1(const sensor_msgs::CameraInfo& in_message);
-  void IntrinsicsCallback2(const sensor_msgs::CameraInfo& in_message);
-  void IntrinsicsCallback3(const sensor_msgs::CameraInfo& in_message);
-  void IntrinsicsCallback4(const sensor_msgs::CameraInfo& in_message);
-  void IntrinsicsCallback5(const sensor_msgs::CameraInfo& in_message);
-  void IntrinsicsCallback6(const sensor_msgs::CameraInfo& in_message);
-  void IntrinsicsCallback7(const sensor_msgs::CameraInfo& in_message);
+  void IntrinsicsCallback0(const sensor_msgs::CameraInfo &in_message);
+  void IntrinsicsCallback1(const sensor_msgs::CameraInfo &in_message);
+  void IntrinsicsCallback2(const sensor_msgs::CameraInfo &in_message);
+  void IntrinsicsCallback3(const sensor_msgs::CameraInfo &in_message);
+  void IntrinsicsCallback4(const sensor_msgs::CameraInfo &in_message);
+  void IntrinsicsCallback5(const sensor_msgs::CameraInfo &in_message);
+  void IntrinsicsCallback6(const sensor_msgs::CameraInfo &in_message);
+  void IntrinsicsCallback7(const sensor_msgs::CameraInfo &in_message);
 
 
 	void CloudCallback(const sensor_msgs::PointCloud2::ConstPtr &in_cloud_msg);
@@ -149,7 +157,9 @@ class RosPixelCloudFusionApp
   /*!
    *  Helper functions
    */
-  void SaveCurrentImageFrame(const sensor_msgs::Image::ConstPtr &in_image_msg, int camera_id);
+   
+   //void SaveCurrentImageFrame(const sensor_msgs::Image::ConstPtr &in_image_msg, int camera_id);
+  void SaveCurrentImageFrame(const T &in_image_msg, int camera_id);
   void SaveCameraInfo(const sensor_msgs::CameraInfo& in_message, int camera_id);
   bool IsCamInfoReady();
 
@@ -190,9 +200,7 @@ class RosPixelCloudFusionApp
   std::vector<cv::Mat>              camera_projection_vector_;          //aka projection matrix, P
   //friend class                    RosCallBack;                        //permission to access
   std::vector<tf::StampedTransform> camera_lidar_tf_vector_;            //tf cameras-lidar transform
-public:
-	void Run();
-	RosPixelCloudFusionApp();
+  
 };
 
 #endif //PROJECT_PIXEL_CLOUD_FUSION_H

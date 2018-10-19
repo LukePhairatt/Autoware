@@ -40,8 +40,11 @@ int main(int argc, char **argv)
 {
 	ros::init(argc, argv, __APP_NAME__);
 
-	RosPixelCloudFusionApp app;
-
+	//RosPixelCloudFusionApp app;
+	
+  //RosPixelCloudFusionApp<sensor_msgs::Image::ConstPtr> app;
+  RosPixelCloudFusionApp<sensor_msgs::CompressedImageConstPtr> app;
+  
 	app.Run();
 
 	return 0;

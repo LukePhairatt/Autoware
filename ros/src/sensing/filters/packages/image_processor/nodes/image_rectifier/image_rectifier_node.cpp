@@ -80,7 +80,7 @@ class RosImageRectifierApp
 
         //remap works
         cv::Mat newCamMat, map1, map2;
-        cv::Size imageSize(640,480);
+        cv::Size imageSize(in_image_sensor.width, in_image_sensor.height);
         cv::fisheye::estimateNewCameraMatrixForUndistortRectify(camera_instrinsics_, distortion_coefficients_, imageSize,
                                                                 cv::Matx33d::eye(), newCamMat, 1);
         cv::fisheye::initUndistortRectifyMap(camera_instrinsics_, distortion_coefficients_, cv::Matx33d::eye(), newCamMat,

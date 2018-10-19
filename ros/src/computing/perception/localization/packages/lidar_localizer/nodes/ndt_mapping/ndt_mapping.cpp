@@ -55,8 +55,11 @@
 
 #include <pcl/io/io.h>
 #include <pcl/io/pcd_io.h>
+#include <pcl/io/ply_io.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <pcl/filters/passthrough.h>
+
 
 #include <ndt_cpu/NormalDistributionsTransform.h>
 #include <pcl/registration/ndt.h>
@@ -115,7 +118,7 @@ static double current_velocity_imu_y = 0.0;
 static double current_velocity_imu_z = 0.0;
 
 static pcl::PointCloud<pcl::PointXYZI> map;
-static pcl::PointCloud<pcl::PointXYZRGB> map_color;
+static pcl::PointCloud<pcl::PointXYZRGBA> map_color;
 
 
 static pcl::NormalDistributionsTransform<pcl::PointXYZI, pcl::PointXYZI> ndt;
@@ -208,21 +211,31 @@ static void output_callback(const autoware_msgs::ConfigNdtMappingOutput::ConstPt
   std::cout << "filter_res: " << filter_res << std::endl;
   std::cout << "filename: " << filename << std::endl;
 
-
   pcl::PointCloud<pcl::PointXYZI>::Ptr map_ptr(new pcl::PointCloud<pcl::PointXYZI>(map));
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr map_color_ptr(new pcl::PointCloud<pcl::PointXYZRGB>(map_color));
+  pcl::PointCloud<pcl::PointXYZRGBA>::Ptr map_color_ptr(new pcl::PointCloud<pcl::PointXYZRGBA>(map_color));
   pcl::PointCloud<pcl::PointXYZI>::Ptr map_filtered(new pcl::PointCloud<pcl::PointXYZI>());
   map_ptr->header.frame_id = "map";
   map_color_ptr->header.frame_id = "map";
   map_filtered->header.frame_id = "map";
   sensor_msgs::PointCloud2::Ptr map_msg_ptr(new sensor_msgs::PointCloud2);
 
-  pcl::toROSMsg(*map_ptr, *map_msg_ptr);
+  pcl::toROSMsg(*map_color_ptr, *map_msg_ptr);
+  
   // Apply voxelgrid filter
   if (filter_res == 0.0)
   {
-    std::cout << "Original: " << map_ptr->points.size() << " points." << std::endl;
-    pcl::toROSMsg(*map_ptr, *map_msg_ptr);
+    std::cout << "Original: " << map_color_ptr->points.size() << " points." << std::endl;
+    // filter map_color_ptr using alpha
+    pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZRGBA>);
+    // Create the filtering object
+		pcl::PassThrough<pcl::PointXYZRGBA> pass;
+		pass.setInputCloud (map_color_ptr);
+		pass.setFilterFieldName ("a");
+		pass.setFilterLimits (250, 260);
+		pass.filter (*cloud_filtered);
+    std::cout << "Filtered: " << cloud_filtered->points.size() << " points." << std::endl;
+    //pcl::toROSMsg(*map_color_ptr, *map_msg_ptr);
+    pcl::toROSMsg(*cloud_filtered, *map_msg_ptr);
   }
   else
   {
@@ -242,14 +255,16 @@ static void output_callback(const autoware_msgs::ConfigNdtMappingOutput::ConstPt
   // Writing Point Cloud data to PCD file
   if (filter_res == 0.0)
   {
-    pcl::io::savePCDFileASCII(filename, *map_ptr);
-    std::cout << "Saved " << map_ptr->points.size() << " data points to " << filename << "." << std::endl;
+    //pcl::io::savePCDFileASCII(filename, *map_ptr);
+    pcl::io::savePCDFileASCII(filename, *map_color_ptr);
+    std::cout << "Saved " << map_color_ptr->points.size() << " data points to " << filename << "." << std::endl;
   }
   else
   {
     pcl::io::savePCDFileASCII(filename, *map_filtered);
     std::cout << "Saved " << map_filtered->points.size() << " data points to " << filename << "." << std::endl;
-  }
+  }  
+  
 }
 
 static void imu_odom_calc(ros::Time current_time)
@@ -475,11 +490,11 @@ static void imu_callback(const sensor_msgs::Imu::Ptr& input)
 static void points_callback(const sensor_msgs::PointCloud2::ConstPtr& input)
 {
   // color points
-  pcl::PointXYZRGB p_color;
-  pcl::PointCloud<pcl::PointXYZRGB> tmp_color, scan_color;
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr transformed_scan_color_ptr(new pcl::PointCloud<pcl::PointXYZRGB>());
+  pcl::PointXYZRGBA p_color;
+  pcl::PointCloud<pcl::PointXYZRGBA> tmp_color, scan_color;
+  pcl::PointCloud<pcl::PointXYZRGBA>::Ptr transformed_scan_color_ptr(new pcl::PointCloud<pcl::PointXYZRGBA>());
   // intensity points
-  double r;
+   
   pcl::PointXYZI p;
   pcl::PointCloud<pcl::PointXYZI> tmp, scan;
   pcl::PointCloud<pcl::PointXYZI>::Ptr filtered_scan_ptr(new pcl::PointCloud<pcl::PointXYZI>());
@@ -494,10 +509,10 @@ static void points_callback(const sensor_msgs::PointCloud2::ConstPtr& input)
 
   current_scan_time = input->header.stamp;
 
-  // we are expecting XYZRGB
+  // we are expecting XYZRGBA
   pcl::fromROSMsg(*input, tmp_color);
 
-  for (pcl::PointCloud<pcl::PointXYZRGB>::const_iterator item = tmp_color.begin(); item != tmp_color.end(); item++)
+  for (pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator item = tmp_color.begin(); item != tmp_color.end(); item++)
   {
     // Normal cloud intensity
     p.x = (double)item->x;
@@ -509,13 +524,23 @@ static void points_callback(const sensor_msgs::PointCloud2::ConstPtr& input)
     p_color.x = p.x;
     p_color.y = p.y;
     p_color.z = p.z;
-    p_color.r = item->r;
-    p_color.g = item->g;
-    p_color.b = item->b;
-
-    //std::cout << "r: " << p_color.r << "g: " << p_color.g << "b: " << p_color.b << std::endl;
-
+    
+    //1
+    //p_color.rgb = item->rgb;  
+    
+    //2
+    //int rgb = ((int)item->r) << 16 | ((int)item->g) << 8 | ((int)item->b);
+		//p_color.rgb = rgb;
+		
+		//3
+    p_color.r = (uint8_t)item->r;
+    p_color.g = (uint8_t)item->g;
+    p_color.b = (uint8_t)item->b;
+    p_color.a = (uint8_t)item->a;
+    
+    double r;
     r = sqrt(pow(p.x, 2.0) + pow(p.y, 2.0));
+    // filter range
     if (min_scan_range < r && r < max_scan_range)
     {
       scan.push_back(p);
@@ -524,7 +549,7 @@ static void points_callback(const sensor_msgs::PointCloud2::ConstPtr& input)
   }
 
   pcl::PointCloud<pcl::PointXYZI>::Ptr scan_ptr(new pcl::PointCloud<pcl::PointXYZI>(scan));
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr scan_color_ptr(new pcl::PointCloud<pcl::PointXYZRGB>(scan_color));
+  pcl::PointCloud<pcl::PointXYZRGBA>::Ptr scan_color_ptr(new pcl::PointCloud<pcl::PointXYZRGBA>(scan_color));
 
   // Add initial point cloud to velodyne_map
   if (initial_scan_loaded == 0)
@@ -544,7 +569,7 @@ static void points_callback(const sensor_msgs::PointCloud2::ConstPtr& input)
   voxel_grid_filter.filter(*filtered_scan_ptr);
 
   pcl::PointCloud<pcl::PointXYZI>::Ptr map_ptr(new pcl::PointCloud<pcl::PointXYZI>(map));
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr map_color_ptr(new pcl::PointCloud<pcl::PointXYZRGB>(map_color));
+  pcl::PointCloud<pcl::PointXYZRGBA>::Ptr map_color_ptr(new pcl::PointCloud<pcl::PointXYZRGBA>(map_color));
 
   if (_method_type == MethodType::PCL_GENERIC)
   {

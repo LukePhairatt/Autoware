@@ -12,8 +12,29 @@
     <arg name="image_src_02" default="/gmsl_image_raw_0_2" />
     <arg name="camera_info_src_02" default="/camera_info_02" />
     <arg name="image_rectified_out_02" default="/image_rectified_02" />
+
+	<arg name="image_src_03" default="/gmsl_image_raw_0_3" />
+    <arg name="camera_info_src_03" default="/camera_info_03" />
+    <arg name="image_rectified_out_03" default="/image_rectified_03" />
+
+	<arg name="image_src_10" default="/gmsl_image_raw_1_0" />
+    <arg name="camera_info_src_10" default="/camera_info_10" />
+    <arg name="image_rectified_out_10" default="/image_rectified_10" />
     
-    <!-- rosrun image_processor image_rotator -->
+    <arg name="image_src_11" default="/gmsl_image_raw_1_1" />
+    <arg name="camera_info_src_11" default="/camera_info_11" />
+    <arg name="image_rectified_out_11" default="/image_rectified_11" />
+    
+    <arg name="image_src_12" default="/gmsl_image_raw_1_2" />
+    <arg name="camera_info_src_12" default="/camera_info_12" />
+    <arg name="image_rectified_out_12" default="/image_rectified_12" />
+
+	<arg name="image_src_13" default="/gmsl_image_raw_1_3" />
+    <arg name="camera_info_src_13" default="/camera_info_13" />
+    <arg name="image_rectified_out_13" default="/image_rectified_13" />
+
+    
+    <!-- autoware image_processor for plum_blob or fisheye -->
     <node pkg="image_processor" type="image_rectifier" name="image_rectifier_00" output="screen">
         <param name="image_src" value="$(arg image_src_00)" />
         <param name="camera_info_src" value="$(arg camera_info_src_00)" />
@@ -29,4 +50,33 @@
         <param name="camera_info_src" value="$(arg camera_info_src_02)" />
         <param name="image_rectified" value="$(arg image_rectified_out_02)" />
     </node>
+	<node pkg="image_processor" type="image_rectifier" name="image_rectifier_03" output="screen">
+        <param name="image_src" value="$(arg image_src_03)" />
+        <param name="camera_info_src" value="$(arg camera_info_src_03)" />
+        <param name="image_rectified" value="$(arg image_rectified_out_03)" />
+    </node>
+	<node pkg="image_processor" type="image_rectifier" name="image_rectifier_10" output="screen">
+        <param name="image_src" value="$(arg image_src_10)" />
+        <param name="camera_info_src" value="$(arg camera_info_src_10)" />
+        <param name="image_rectified" value="$(arg image_rectified_out_10)" />
+    </node>
+    <node pkg="image_processor" type="image_rectifier" name="image_rectifier_11" output="screen">
+        <param name="image_src" value="$(arg image_src_11)" />
+        <param name="camera_info_src" value="$(arg camera_info_src_11)" />
+        <param name="image_rectified" value="$(arg image_rectified_out_11)" />
+    </node>
+    <node pkg="image_processor" type="image_rectifier" name="image_rectifier_12" output="screen">
+        <param name="image_src" value="$(arg image_src_12)" />
+        <param name="camera_info_src" value="$(arg camera_info_src_12)" />
+        <param name="image_rectified" value="$(arg image_rectified_out_12)" />
+    </node>
+	<node pkg="image_processor" type="image_rectifier" name="image_rectifier_13" output="screen">
+        <param name="image_src" value="$(arg image_src_13)" />
+        <param name="camera_info_src" value="$(arg camera_info_src_13)" />
+        <param name="image_rectified" value="$(arg image_rectified_out_13)" />
+    </node>
+
+
+
+
 </launch>

@@ -3,16 +3,22 @@
     <!-- this node publishes undistored images 
     <include file="$(find image_processor)/launch/image_rectifier_gmsl.launch" />
     --> 
+    																		
+	<!-- Image source topic 
+    <rosparam param="cam_topics"> ['/port_0/camera_0/image_raw/compressed','/port_0/camera_1/image_raw/compressed','/port_0/camera_2/image_raw/compressed','/port_0/camera_3/image_raw/compressed','/port_1/camera_0/image_raw/compressed','/port_1/camera_1/image_raw/compressed','/port_2/camera_0/image_raw/compressed','/port_2/camera_1/image_raw/compressed'] </rosparam> -->
+
+	<rosparam param="cam_topics"> ['/port_0/camera_0/image_raw/compressed','/port_0/camera_1/image_raw/compressed','/port_0/camera_2/image_raw/compressed','/port_2/camera_1/image_raw/compressed'] </rosparam> 
+	
+
+	<!-- Caminfo topics for undistortion --> 
+    <rosparam param="cam_infos"> ['/camera_info_00','/camera_info_01','/camera_info_02','/camera_info_21'] </rosparam>  			
+
     
+	<!-- Run color overlay -->
     <!-- this node publishes rgb point cloud "/points_fused" whatever camera you put here will be used for colorising RGB -->
-    <arg name="points_src" default="/velodyne_points" /> 																			<!-- PointCloud source topic-->
-
-    <rosparam param="cam_topics"> ['/gmsl_image_raw_0_0', '/gmsl_image_raw_0_1', '/gmsl_image_raw_0_2', '/gmsl_image_raw_0_3','/gmsl_image_raw_1_0', '/gmsl_image_raw_1_1', '/gmsl_image_raw_1_2', '/gmsl_image_raw_1_3'] </rosparam> 	<!-- Image source topic-->
-    <rosparam param="cam_infos"> ['/camera_info_00', '/camera_info_01', '/camera_info_02', '/camera_info_03', '/camera_info_10', '/camera_info_11', '/camera_info_12', '/camera_info_13'] </rosparam>						<!-- Camera info topic-->
-
-    
+    <arg name="points_src" default="/velodyne_points" /> 
     <node name="pixel_cloud_fusion" pkg="pixel_cloud_fusion" type="pixel_cloud_fusion" output="screen">
-        <param name="points_src" value="$(arg points_src)" />
+		<param name="points_src" value="$(arg points_src)" />
     </node>
 		
 </launch>
