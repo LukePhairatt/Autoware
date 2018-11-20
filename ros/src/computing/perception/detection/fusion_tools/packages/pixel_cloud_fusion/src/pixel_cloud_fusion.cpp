@@ -39,6 +39,7 @@
 #include <math.h>
 
 
+
 // Debug processing time
 #include <chrono>  // Clock timer
 typedef std::chrono::high_resolution_clock Clock; 
@@ -226,15 +227,16 @@ void RosPixelCloudFusionApp<T>::CloudCallback(const sensor_msgs::PointCloud2::Co
     ROS_INFO("[%s] Waiting for Camera-Lidar tf to be available.", __APP_NAME__);
 		return;
 	}
+	//save a snapshot of images
+	std::vector<cv::Mat> current_image_vector_x = current_image_vector_;
 	
-  
   //tf and camera info are all received and ready to go
   //find rgb color for points
 	pcl::PointCloud<pcl::PointXYZ>::Ptr in_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr out_cloud(new pcl::PointCloud<pcl::PointXYZRGBA>);
 	pcl::fromROSMsg(*in_cloud_msg, *in_cloud);
-  std::unordered_map<cv::Point, pcl::PointXYZ> projection_map;
-  std::unordered_map<cv::Point, int> projection_color;
+  //std::unordered_map<cv::Point, pcl::PointXYZ> projection_map;
+  std::unordered_map<std::string, pcl::PointXYZ> projection_map;
 
   //find a corresponding image pixel from all camera
   pcl::PointXYZ cam_cloud;
@@ -244,7 +246,6 @@ void RosPixelCloudFusionApp<T>::CloudCallback(const sensor_msgs::PointCloud2::Co
 
   double fx, fy, cx, cy;
   bool run_rgb = false;
-  double max_color_range = 10.0;                                             // only for coloring point clouds (far away range is unreliable color)
   out_cloud->points.clear();
 
 #pragma omp for
@@ -255,8 +256,8 @@ void RosPixelCloudFusionApp<T>::CloudCallback(const sensor_msgs::PointCloud2::Co
     for(int camid=0;camid<numcamera_;camid++)
     {
       //step 0: initial: are all camera images ready
-      if(current_image_vector_[camid].rows <= 0 ||
-         current_image_vector_[camid].cols <= 0 ||
+      if(current_image_vector_x[camid].rows <= 0 ||
+         current_image_vector_x[camid].cols <= 0 ||
          image_frame_id_vector_[camid] == "")
       {
 				
@@ -276,49 +277,44 @@ void RosPixelCloudFusionApp<T>::CloudCallback(const sensor_msgs::PointCloud2::Co
       int v = int(cam_cloud.y * fy / cam_cloud.z + cy);
 
       //step 4: check if it in this plane and not already inserted
-      //double pseudo_range = sqrt(cam_cloud.x*cam_cloud.x + cam_cloud.y*cam_cloud.y + cam_cloud.z*cam_cloud.z);
-      double xx = in_cloud->points[i].x;
-      double yy = in_cloud->points[i].y;
-      double zz = in_cloud->points[i].z;
-      
-      double pseudo_range = sqrt(xx*xx + yy*yy + zz*zz);
       //(TODO fusing: using average RGB or finding the best one?) using the first one for now
       if ((u >= 0) && (u < image_size_.width) &&
           (v >= 0) && (v < image_size_.height) &&
           (cam_cloud.z > 0) && run_rgb
           )
       {
-				// first entry or check ray distance (ignore points behind the image or det it to a dark color)
-				if(cam_cloud_projection[i] == 0.0 || pseudo_range < cam_cloud_projection[i])
+				// first entry or check ray distance (ignore points behind the image or set it to a dark color only on the same u,v )
+				//if(cam_cloud_projection[i] == 0.0 || pseudo_range < cam_cloud_projection[i])
 				{
+					// add current minimum record
+					//cam_cloud_projection[i] = pseudo_range;
+					
 					// add item and set insertion flag to eliminate overlaping u,v point (first come first serve) for all cameras
-					projection_map.insert(std::pair<cv::Point, pcl::PointXYZ>(cv::Point(u, v), in_cloud->points[i]));
-					// filter out color from a far way range
-					if(pseudo_range < max_color_range)
-					{
-						//cam_cloud_color[i] = true;
-						projection_color.insert((std::pair<cv::Point, int>(cv::Point(u, v), i)));
-						
-					}
+					//projection_map.insert(std::pair<cv::Point, pcl::PointXYZ>(cv::Point(u, v), in_cloud->points[i]));
+					std::string pixel_cam_key = std::to_string(camid) + std::string(":") + std::to_string(u) + std::string(":") + std::to_string(v);
+					projection_map.insert(std::pair<std::string, pcl::PointXYZ>(pixel_cam_key, in_cloud->points[i]));
 				}
 				
-      }
-    }
-  }
+      }//end if
+    }//end for cameras
+  }// end for points
 
 //lookup pixels
 #pragma omp for
   for(int camid=0;camid<numcamera_;camid++)
   {
-		  
       for (int row = 0; row < image_size_.height; row++)
       {
         for (int col = 0; col < image_size_.width; col++)
         {
-          std::unordered_map<cv::Point, pcl::PointXYZ>::const_iterator iterator_3d_2d;   
+          //std::unordered_map<cv::Point, pcl::PointXYZ>::const_iterator iterator_3d_2d;   
+          std::unordered_map<std::string, pcl::PointXYZ>::const_iterator iterator_3d_2d;
           pcl::PointXYZ corresponding_3d_point;
           pcl::PointXYZRGBA colored_3d_point;
-          iterator_3d_2d = projection_map.find(cv::Point(col, row));
+          
+          //iterator_3d_2d = projection_map.find(cv::Point(col, row));
+          std::string pixel_cam_key = std::to_string(camid) + std::string(":") + std::to_string(row) + std::string(":") + std::to_string(col);
+          iterator_3d_2d = projection_map.find(pixel_cam_key);
           
           if (iterator_3d_2d != projection_map.end())
           {
@@ -326,14 +322,18 @@ void RosPixelCloudFusionApp<T>::CloudCallback(const sensor_msgs::PointCloud2::Co
             colored_3d_point.x = corresponding_3d_point.x;
             colored_3d_point.y = corresponding_3d_point.y;
             colored_3d_point.z = corresponding_3d_point.z;
-            
-            cv::Vec3b rgb_pixel = current_image_vector_[camid].at<cv::Vec3b>(row, col);
+            double x2 = pow(colored_3d_point.x, 2.0);
+            double y2 = pow(colored_3d_point.y, 2.0);
+            double z2 = pow(colored_3d_point.z, 2.0);
+            cv::Vec3b rgb_pixel = current_image_vector_x[camid].at<cv::Vec3b>(row, col);
             
             // filter out far away unreliable color 
             std::unordered_map<cv::Point, int>::const_iterator iterator_3d_alpha;
-            iterator_3d_alpha = projection_color.find(cv::Point(col, row));
+            //iterator_3d_alpha = projection_color.find(cv::Point(col, row));
             // reliable color on short range
-            if(iterator_3d_alpha != projection_color.end())
+            //if(iterator_3d_alpha != projection_color.end())
+            double filtered_range = sqrt(x2 + y2 + z2);
+            if(filtered_range < max_color_range_)
             {
 							//pcl cast
 							//uint32_t rgb = (static_cast<uint32_t>(rgb_pixel[2]) << 16 | static_cast<uint32_t>(rgb_pixel[1]) << 8 | static_cast<uint32_t>(rgb_pixel[0]));
@@ -345,6 +345,7 @@ void RosPixelCloudFusionApp<T>::CloudCallback(const sensor_msgs::PointCloud2::Co
 							colored_3d_point.g = (uint8_t)rgb_pixel[1];  //1
 							colored_3d_point.b = (uint8_t)rgb_pixel[0];  //0
 							colored_3d_point.a = 255;
+							//std::cout <<  "add pixel:" << (int)colored_3d_point.r << " " << (int)colored_3d_point.g << " " << (int)colored_3d_point.b << std::endl;
 					  }
 					  // unreliable long range
 					  else
@@ -476,6 +477,7 @@ void RosPixelCloudFusionApp<T>::InitializeRosIo(ros::NodeHandle &in_private_hand
   ROS_ASSERT(caminfo_topics_vector_.getType() == XmlRpc::XmlRpcValue::TypeArray);
   //check if there is a same number of cameras and camera info
   ROS_ASSERT(image_topics_vector_.size() == caminfo_topics_vector_.size());
+ 
 
   //init how many cameras use for lidar color
   numcamera_ = image_topics_vector_.size();
@@ -499,17 +501,20 @@ void RosPixelCloudFusionApp<T>::InitializeRosIo(ros::NodeHandle &in_private_hand
   camera_lidar_tf_vector_ = std::vector<tf::StampedTransform>(numcamera_);
   //init distortion model type
   distortion_model_vector_ =  std::vector<std::string>(numcamera_);
+ 
+  
 
 	//get params
   std::string points_src, image_src, camera_info_src, fused_topic_str = "/points_fused";
 	std::string name_space_str = ros::this_node::getNamespace();
-
+   
 	ROS_INFO("[%s] This node requires: Registered TF(Lidar-Camera), CameraInfo, Image, and PointCloud.", __APP_NAME__);
 	in_private_handle.param<std::string>("points_src", points_src, "/points_raw");
 	ROS_INFO("[%s] points_src: %s", __APP_NAME__, points_src.c_str());
 	
 	in_private_handle.param<std::string>("image_type", image_type_, "compressed");
-	
+	 //range for colorlisation
+  in_private_handle.param("max_color_range", max_color_range_, double(20));
 	
 
 	if (name_space_str != "/")
@@ -532,12 +537,13 @@ void RosPixelCloudFusionApp<T>::InitializeRosIo(ros::NodeHandle &in_private_hand
                                      &RosPixelCloudFusionApp::IntrinsicsCallback1, this);                                                             
   ROS_INFO("[%s] Subscribing to... %s", __APP_NAME__, static_cast<std::string>(caminfo_topics_vector_[2]).c_str());
   intrinsics_subscriber_vector_[2] = in_private_handle.subscribe(static_cast<std::string>(caminfo_topics_vector_[2]),1,
-                                     &RosPixelCloudFusionApp::IntrinsicsCallback2, this);     
-                                 
+                                     &RosPixelCloudFusionApp::IntrinsicsCallback2, this);           
+  /*                                                   
   ROS_INFO("[%s] Subscribing to... %s", __APP_NAME__, static_cast<std::string>(caminfo_topics_vector_[3]).c_str());
   intrinsics_subscriber_vector_[3] = in_private_handle.subscribe(static_cast<std::string>(caminfo_topics_vector_[3]),1,
-                                     &RosPixelCloudFusionApp::IntrinsicsCallback3, this);
-  /*                                     
+                                     &RosPixelCloudFusionApp::IntrinsicsCallback3, this);      
+                             
+                                                                  
   ROS_INFO("[%s] Subscribing to... %s", __APP_NAME__, static_cast<std::string>(caminfo_topics_vector_[4]).c_str());
   intrinsics_subscriber_vector_[4] = in_private_handle.subscribe(static_cast<std::string>(caminfo_topics_vector_[4]),1,
                                      &RosPixelCloudFusionApp::IntrinsicsCallback4, this);
@@ -550,7 +556,7 @@ void RosPixelCloudFusionApp<T>::InitializeRosIo(ros::NodeHandle &in_private_hand
   ROS_INFO("[%s] Subscribing to... %s", __APP_NAME__, static_cast<std::string>(caminfo_topics_vector_[7]).c_str());
   intrinsics_subscriber_vector_[7] = in_private_handle.subscribe(static_cast<std::string>(caminfo_topics_vector_[7]),1,
                                      &RosPixelCloudFusionApp::IntrinsicsCallback7, this);
-  */
+	*/
 	
   ROS_INFO("[%s] Subscribing to... %s", __APP_NAME__, static_cast<std::string>(image_topics_vector_[0]).c_str());
   image_subscriber_vector_[0] = in_private_handle.subscribe(static_cast<std::string>(image_topics_vector_[0]),1,
@@ -560,12 +566,12 @@ void RosPixelCloudFusionApp<T>::InitializeRosIo(ros::NodeHandle &in_private_hand
                       &RosPixelCloudFusionApp::ImageCallback1, this);                     
   ROS_INFO("[%s] Subscribing to... %s", __APP_NAME__, static_cast<std::string>(image_topics_vector_[2]).c_str());
   image_subscriber_vector_[2] = in_private_handle.subscribe(static_cast<std::string>(image_topics_vector_[2]),1,
-                      &RosPixelCloudFusionApp::ImageCallback2, this);  
-               
+                      &RosPixelCloudFusionApp::ImageCallback2, this);    
+                      
+  /*                            
   ROS_INFO("[%s] Subscribing to... %s", __APP_NAME__, static_cast<std::string>(image_topics_vector_[3]).c_str());
   image_subscriber_vector_[3] = in_private_handle.subscribe(static_cast<std::string>(image_topics_vector_[3]),1,
                       &RosPixelCloudFusionApp::ImageCallback3, this);
-   /* 
   ROS_INFO("[%s] Subscribing to... %s", __APP_NAME__, static_cast<std::string>(image_topics_vector_[4]).c_str());
   image_subscriber_vector_[4] = in_private_handle.subscribe(static_cast<std::string>(image_topics_vector_[4]),1,
                       &RosPixelCloudFusionApp::ImageCallback4, this);

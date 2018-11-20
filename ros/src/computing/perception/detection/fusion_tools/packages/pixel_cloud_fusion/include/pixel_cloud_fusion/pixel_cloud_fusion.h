@@ -200,6 +200,7 @@ private:
   std::vector<cv::Mat>              camera_projection_vector_;          //aka projection matrix, P
   //friend class                    RosCallBack;                        //permission to access
   std::vector<tf::StampedTransform> camera_lidar_tf_vector_;            //tf cameras-lidar transform
+  double 														max_color_range_;                   //point withing this range will be used for colorising
   
 };
 
