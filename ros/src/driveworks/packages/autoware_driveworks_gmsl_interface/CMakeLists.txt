@@ -1,153 +1,102 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(gmsl_camera)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error -Wno-deprecated-declarations")
+project(autoware_driveworks_gmsl_interface)
 
-##############################
-## BUILD only on PX2 device ##
-##############################
-# Change to TRUE if you are buiding this package on PX2
-set(PX2_BUILD FALSE)
-
-if(PX2_BUILD)
-##################
-## ROS packages ##
-##################
-## Find catkin macros and libraries
-## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
-## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS
-	autoware_build_flags
-	roscpp
-	sensor_msgs
-	std_msgs
-	cv_bridge
-	image_transport
-	camera_info_manager
-	nodelet
-)
-
-
-##############################
-## Set build configurations ##
-##############################
-include(FindDriveWorksSDK.cmake)
-link_directories(${Driveworks_LIBRARIES})
-
-# manually turn off a target build (directly build on PX2)
-set(VIBRANTE FALSE)
-add_definitions(-DVIBRANTE)
-
-#####################
-## System packages ##
-#####################
 find_package(CUDA)
-# Need CUDA to run this package
-if(CUDA_FOUND)
-find_package(Threads REQUIRED)
-find_package(OpenCV REQUIRED)
-find_package(Boost REQUIRED)
-###################################
-## catkin specific configuration ##
-###################################
-## The catkin_package macro generates cmake config files for your package
-## Declare things to be passed to dependent projects
-## INCLUDE_DIRS: uncomment this if you package contains header files
-## LIBRARIES: libraries you create in this project that dependent projects also need
-## CATKIN_DEPENDS: catkin_packages dependent projects also need
-## DEPENDS: system dependencies of this project that dependent projects also need
-catkin_package(
-	LIBRARIES ${PROJECT_NAME}
-)
 
-#########################
-##  Include directory  ##
-#########################
-include_directories(include 
-	${catkin_INCLUDE_DIRS}
-	${Driveworks_INCLUDE_DIR}
-	${CUDA_INCLUDE_DIRS}
-	${CMAKE_CURRENT_SOURCE_DIR}/src
-	${NVMEDIA_DIRS}
-	${BOOST_INCLUDE_DIR}
-)
+if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "aarch64" AND CUDA_FOUND)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      set(DRIVEWORKS_LINKER_FLAGS "-Wl,--unresolved-symbols=ignore-in-object-files -Wl,--allow-shlib-undefined")
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      set(DRIVEWORKS_LINKER_FLAGS "-Wl,-undefined,dynamic_lookup")
+    endif()
 
-####################
-## Driveworks SDK ##
-####################
-list(APPEND Driveworks_LIBRARIES 
-	nvmedia 
-	${CUDA_LIBRARIES} 
-    ${CMAKE_THREAD_LIBS_INIT}
-)
+    find_package(catkin REQUIRED COMPONENTS
+            autoware_build_flags
+            roscpp
+            sensor_msgs
+            std_msgs
+            cv_bridge
+            image_transport
+            camera_info_manager
+            nodelet
+    )
 
-set(LIBRARIES ${Driveworks_LIBRARIES})
+    catkin_package(
+            LIBRARIES ${PROJECT_NAME}
+            CATKIN_DEPENDS
+            sensor_msgs
+            std_msgs
+    )
 
+    add_definitions(-DVIBRANTE)
 
-####################
-##  EXECUTABLE    ##
-####################
-set(NODE_NAME ${PROJECT_NAME}_node)
-cuda_add_executable(${NODE_NAME} 
-	src/gmsl_camera_multiple/gmsl_node.cpp 
-	src/gmsl_camera_multiple/cv_connection.cpp
-	src/gmsl_camera_multiple/SekonixGmslCamera.cpp 
-	src/gmsl_camera_multiple/DriveWorksApi.cpp
-	src/gmsl_camera_multiple/DeviceArguments.cpp
-)
+    include_directories(
+        include
+        ${catkin_INCLUDE_DIRS}
+        ${DRIVEWORKS_TOOLKIT_TARGET_DIR}/include
+        ${DRIVE_T186REF_LINUX_ROOT_DIR}/include
+    )
 
+    link_directories(
+        ${catkin_LIBRARY_DIRS}
+        /usr/lib/
+        lib
+        /usr/local/driveworks/lib/
+        ${DRIVEWORKS_TOOLKIT_TARGET_DIR}/lib
+        ${DRIVE_T186REF_LINUX_ROOT_DIR}/lib-target
+    )
 
-add_dependencies(${NODE_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${NODE_NAME} PRIVATE
-	${catkin_LIBRARIES} 
-	driveworks
-	${CUDA_LIBRARY}
-	${LIBRARIES}
-	${BOOST_LIBRARY}
-	${OpenCV_LIBS}
-   
-)
+    set(NODE_NAME ${PROJECT_NAME}_node)
+    cuda_add_executable(${NODE_NAME}
+        src/gmsl_camera_multiple/gmsl_node.cpp
+        src/gmsl_camera_multiple/cv_connection.cpp
+        src/gmsl_camera_multiple/SekonixGmslCamera.cpp
+        src/gmsl_camera_multiple/DriveWorksApi.cpp
+        src/gmsl_camera_multiple/DeviceArguments.cpp
+    )
 
+    add_dependencies(${NODE_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+    target_link_libraries(${NODE_NAME} PRIVATE
+        ${catkin_LIBRARIES}
+        nvmedia
+        driveworks
+        ${DRIVEWORKS_LINKER_FLAGS}
+    )
 
-# nodelet
-set(NODELET_NAME nodelet_${PROJECT_NAME})
-add_library(${NODELET_NAME} 
-	src/gmsl_camera_multiple/gmsl_nodelets.cpp 
-	src/gmsl_camera_multiple/cv_connection.cpp
-	src/gmsl_camera_multiple/SekonixGmslCamera.cpp 
-	src/gmsl_camera_multiple/DriveWorksApi.cpp
-	src/gmsl_camera_multiple/DeviceArguments.cpp
-)
-target_link_libraries(${NODELET_NAME} 
-    ${catkin_LIBRARIES} 
-    driveworks
-    ${CUDA_LIBRARY}
-    ${LIBRARIES}
-    ${BOOST_LIBRARY}
-    ${OpenCV_LIBS}  
-)
+    set(NODELET_NAME nodelet_${PROJECT_NAME})
+    add_library(${NODELET_NAME}
+        src/gmsl_camera_multiple/gmsl_nodelets.cpp
+        src/gmsl_camera_multiple/cv_connection.cpp
+        src/gmsl_camera_multiple/SekonixGmslCamera.cpp
+        src/gmsl_camera_multiple/DriveWorksApi.cpp
+        src/gmsl_camera_multiple/DeviceArguments.cpp
+    )
+
+    target_link_libraries(${NODELET_NAME}
+        ${catkin_LIBRARIES}
+        nvmedia
+        driveworks
+        ${DRIVEWORKS_LINKER_FLAGS}
+    )
+
+    install(TARGETS ${NODE_NAME} ${NODELET_NAME}
+        ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+        LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+        RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+    )
 
 
-##################
-##   Install    ##
-##################
-install(TARGETS ${NODE_NAME} ${NODELET_NAME}
-	ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-	LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-	RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
-
-install(FILES
-	nodelet_gmsl_camera.xml
-	DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-)
+    install(DIRECTORY launch/
+            DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+            PATTERN ".svn" EXCLUDE)
 
 else()
-	message("gmsl_camera driver will not be built. CUDA was not found.")
-endif() #CUDA_FOUND
+    find_package(catkin REQUIRED)
+    catkin_package()
+    message("gmsl_camera driver will not be built. CUDA was not found.")
+endif()
 
-
-endif() #PX2 BUILD
-
-
-
-
+install(FILES
+        nodelet_gmsl_camera.xml
+        DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+        )
